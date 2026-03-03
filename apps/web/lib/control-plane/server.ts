@@ -12,6 +12,7 @@ import {
   createRunExecutor,
   createSourceToolRegistry,
   defaultExecuteToolExposureMode,
+  invokeRuntimeToolCallResult,
   makeGraphqlToolProvider,
   makeMcpToolProvider,
   makeOpenApiToolProvider,
@@ -106,6 +107,7 @@ type ControlPlaneRuntime = {
   fetchOpenApiDocument: typeof fetchOpenApiDocument;
   handleControlPlane: (request: Request) => Promise<Response>;
   handleMcp: (request: Request, workspaceId: string) => Promise<Response>;
+  handleRuntimeToolCall: (request: Request) => Promise<Response>;
   dispose: () => Promise<void>;
 };
 
@@ -118,6 +120,36 @@ type ControlPlanePrincipal = {
   organizationId: string;
   workspaceId: string;
 };
+
+type RuntimeToolCallRequest = {
+  runId: string;
+  callId: string;
+  toolPath: string;
+  input?: Record<string, unknown>;
+};
+
+type RuntimeToolCallResult =
+  | {
+      ok: true;
+      value: unknown;
+    }
+  | {
+      ok: false;
+      kind: "pending";
+      approvalId: string;
+      retryAfterMs: number;
+      error?: string;
+    }
+  | {
+      ok: false;
+      kind: "denied";
+      error: string;
+    }
+  | {
+      ok: false;
+      kind: "failed";
+      error: string;
+    };
 
 const normalizeIdPart = (value: string): string =>
   value.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -144,6 +176,7 @@ const resolveStateRootDir = (): string =>
   defaultControlPlaneStateRootDir;
 
 const openApiSyncRetryDelayMs = 300;
+const runtimeToolCallRetentionMs = 15 * 60 * 1000;
 
 const formatCause = (cause: unknown): string => {
   if (cause && typeof cause === "object") {
@@ -179,6 +212,54 @@ const formatCause = (cause: unknown): string => {
   } catch {
     return String(cause);
   }
+};
+
+const toFailedRuntimeToolCallResult = (error: string): RuntimeToolCallResult => ({
+  ok: false,
+  kind: "failed",
+  error,
+});
+
+const runtimeToolCallErrorResponse = (status: number, error: string): Response =>
+  Response.json(toFailedRuntimeToolCallResult(error), { status });
+
+const normalizeRuntimeToolCallInput = (
+  value: unknown,
+): Record<string, unknown> | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+};
+
+const parseRuntimeToolCallRequest = async (
+  request: Request,
+): Promise<RuntimeToolCallRequest | null> => {
+  const payload = await request.json().catch(() => null);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (
+    typeof record.runId !== "string"
+    || typeof record.callId !== "string"
+    || typeof record.toolPath !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    runId: record.runId,
+    callId: record.callId,
+    toolPath: record.toolPath,
+    input: normalizeRuntimeToolCallInput(record.input),
+  };
 };
 
 const ensurePrincipalProvisioned = (
@@ -297,10 +378,12 @@ const createControlPlaneRuntime = async (): Promise<ControlPlaneRuntime> => {
       requireApprovals: requireToolApprovals,
     },
   );
-  const mcpHandlers = new Map<
-    string,
-    (request: Request) => Promise<Response>
-  >();
+  const mcpSessions = new Map<string, {
+    handler: (request: Request) => Promise<Response>;
+    toolRegistry: ReturnType<typeof createSourceToolRegistry>;
+  }>();
+  const workspaceByRunId = new Map<string, string>();
+  const runCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const sourceCatalog = makeSourceCatalogService(sourceStore);
   const sourceManager = makeSourceManagerService(toolArtifactStore);
@@ -424,8 +507,27 @@ const createControlPlaneRuntime = async (): Promise<ControlPlaneRuntime> => {
     PmActorLive(persistence.rows),
   );
 
-  const resolveMcpHandler = (workspaceId: string): ((request: Request) => Promise<Response>) => {
-    const existing = mcpHandlers.get(workspaceId);
+  const rememberRunWorkspace = (runId: string, workspaceId: string): void => {
+    workspaceByRunId.set(runId, workspaceId);
+
+    const existingTimer = runCleanupTimers.get(runId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      workspaceByRunId.delete(runId);
+      runCleanupTimers.delete(runId);
+    }, runtimeToolCallRetentionMs);
+
+    runCleanupTimers.set(runId, timer);
+  };
+
+  const resolveMcpSession = (workspaceId: string): {
+    handler: (request: Request) => Promise<Response>;
+    toolRegistry: ReturnType<typeof createSourceToolRegistry>;
+  } => {
+    const existing = mcpSessions.get(workspaceId);
     if (existing) {
       return existing;
     }
@@ -442,14 +544,25 @@ const createControlPlaneRuntime = async (): Promise<ControlPlaneRuntime> => {
       runtimeAdapters,
       toolRegistry,
     });
-    const runExecutor = createRunExecutor(executeRuntimeRun);
+    const runExecutor = createRunExecutor(executeRuntimeRun, {
+      makeRunId: () => {
+        const runId = `run_${crypto.randomUUID()}`;
+        rememberRunWorkspace(runId, workspaceId);
+        return runId;
+      },
+    });
     const next = createPmMcpHandler(runExecutor.executeRun, {
       toolRegistry,
       defaultToolExposureMode,
     });
 
-    mcpHandlers.set(workspaceId, next);
-    return next;
+    const session = {
+      handler: next,
+      toolRegistry,
+    };
+
+    mcpSessions.set(workspaceId, session);
+    return session;
   };
 
   return {
@@ -459,10 +572,67 @@ const createControlPlaneRuntime = async (): Promise<ControlPlaneRuntime> => {
     fetchOpenApiDocument,
     handleControlPlane: controlPlaneWebHandler.handler,
     handleMcp: async (request, workspaceId) => {
-      const handler = resolveMcpHandler(workspaceId);
-      return handler(request);
+      const session = resolveMcpSession(workspaceId);
+      return session.handler(request);
+    },
+    handleRuntimeToolCall: async (request) => {
+      if (request.method.toUpperCase() !== "POST") {
+        return runtimeToolCallErrorResponse(405, "Method not allowed. Expected POST");
+      }
+
+      const expectedSecret = webServerEnvironment.cloudflareSandboxCallbackSecret;
+      if (!expectedSecret) {
+        return runtimeToolCallErrorResponse(503, "Runtime callback secret is not configured");
+      }
+
+      const providedSecret = request.headers.get("x-internal-secret")?.trim();
+      if (!providedSecret) {
+        return runtimeToolCallErrorResponse(401, "Runtime callback authentication is required");
+      }
+
+      if (providedSecret !== expectedSecret) {
+        return runtimeToolCallErrorResponse(403, "Runtime callback authentication failed");
+      }
+
+      const input = await parseRuntimeToolCallRequest(request);
+      if (!input) {
+        return runtimeToolCallErrorResponse(400, "Runtime callback request body is invalid");
+      }
+
+      const workspaceId = workspaceByRunId.get(input.runId);
+      if (!workspaceId) {
+        return runtimeToolCallErrorResponse(404, `Unknown runtime callback run id: ${input.runId}`);
+      }
+
+      const session = resolveMcpSession(workspaceId);
+
+      const result = await Effect.runPromise(
+        invokeRuntimeToolCallResult(session.toolRegistry, input).pipe(
+          Effect.catchTag("RuntimeAdapterError", (error) =>
+            Effect.succeed<RuntimeToolCallResult>(
+              toFailedRuntimeToolCallResult(
+                error.details ? `${error.message}: ${error.details}` : error.message,
+              ),
+            )
+          ),
+          Effect.catchAll((cause) =>
+            Effect.succeed<RuntimeToolCallResult>(
+              toFailedRuntimeToolCallResult(formatCause(cause)),
+            )
+          ),
+        ),
+      );
+
+      return Response.json(result, { status: 200 });
     },
     dispose: async () => {
+      for (const timer of runCleanupTimers.values()) {
+        clearTimeout(timer);
+      }
+      runCleanupTimers.clear();
+      workspaceByRunId.clear();
+      mcpSessions.clear();
+
       await controlPlaneWebHandler.dispose();
       await persistence.close();
     },

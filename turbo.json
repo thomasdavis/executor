@@ -11,8 +11,15 @@
     "build": {
       "dependsOn": ["^build"],
       "env": [
+        "CLOUDFLARE_SANDBOX_AUTH_TOKEN",
+        "CLOUDFLARE_SANDBOX_CALLBACK_SECRET",
+        "CLOUDFLARE_SANDBOX_CALLBACK_URL",
+        "CLOUDFLARE_SANDBOX_RUN_URL",
         "CONVEX_URL",
+        "CONTROL_PLANE_POSTGRES_MAX_CONNECTIONS",
         "DATABASE_URL",
+        "MCP_AUTHORIZATION_SERVER",
+        "PM_RUNTIME_KIND",
         "VITE_CONVEX_URL",
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",

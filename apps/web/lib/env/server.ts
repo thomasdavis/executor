@@ -11,6 +11,10 @@ const webServerEnvConfig = configSchema("WebServerEnvironment", {
   pmRuntimeKind: server({ env: "PM_RUNTIME_KIND", optional: true }),
   pmRequireToolApprovals: server({ env: "PM_REQUIRE_TOOL_APPROVALS", optional: true }),
   pmToolExposureMode: server({ env: "PM_TOOL_EXPOSURE_MODE", optional: true }),
+  cloudflareSandboxCallbackSecret: server({
+    env: "CLOUDFLARE_SANDBOX_CALLBACK_SECRET",
+    optional: true,
+  }),
   executorPublicOrigin: server({ env: "EXECUTOR_PUBLIC_ORIGIN", optional: true }),
   vercelProjectProductionUrl: server({ env: "VERCEL_PROJECT_PRODUCTION_URL", optional: true }),
   vercelUrl: server({ env: "VERCEL_URL", optional: true }),
@@ -36,6 +40,7 @@ export const webServerEnvironment = {
   pmRuntimeKind: trim(env.pmRuntimeKind),
   pmRequireToolApprovals: isTruthy(env.pmRequireToolApprovals),
   pmToolExposureMode: trim(env.pmToolExposureMode),
+  cloudflareSandboxCallbackSecret: trim(env.cloudflareSandboxCallbackSecret),
   executorPublicOrigin: trim(env.executorPublicOrigin),
   vercelProjectProductionUrl: trim(env.vercelProjectProductionUrl),
   vercelUrl: trim(env.vercelUrl),
