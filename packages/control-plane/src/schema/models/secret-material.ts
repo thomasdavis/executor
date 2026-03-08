@@ -14,6 +14,7 @@ export const SecretMaterialPurposeSchema = Schema.Literal(
 
 const secretMaterialSchemaOverrides = {
   id: SecretMaterialIdSchema,
+  name: Schema.NullOr(Schema.String),
   purpose: SecretMaterialPurposeSchema,
   createdAt: TimestampMsSchema,
   updatedAt: TimestampMsSchema,

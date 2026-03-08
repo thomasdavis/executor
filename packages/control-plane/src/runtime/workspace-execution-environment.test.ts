@@ -584,6 +584,7 @@ const makeResolver = (persistence: SqlControlPlanePersistence) =>
       storeSecretMaterial: () => Effect.fail(new Error("not implemented in test")),
       getSourceById: () => Effect.fail(new Error("not implemented in test")),
       addExecutorSource: () => Effect.fail(new Error("not implemented in test")),
+      connectMcpSource: () => Effect.fail(new Error("not implemented in test")),
       completeSourceCredentialSetup: () => Effect.fail(new Error("not implemented in test")),
     } as RuntimeSourceAuthService,
   });
@@ -738,6 +739,7 @@ describe("workspace-execution-environment", () => {
       );
       yield* persistence.rows.secretMaterials.upsert({
         id: tokenSecretMaterialId,
+        name: null,
         purpose: "auth_material",
         value: "ghp_test_token",
         createdAt: now,

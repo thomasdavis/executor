@@ -243,6 +243,7 @@ const createPostgresSecretMaterialProvider = (): SecretMaterialProvider => ({
       const id = SecretMaterialIdSchema.make(`sec_${randomUUID()}`);
       yield* runtime.rows.secretMaterials.upsert({
         id,
+        name: null,
         purpose,
         value,
         createdAt: now,

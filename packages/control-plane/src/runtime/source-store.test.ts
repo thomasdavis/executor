@@ -85,6 +85,7 @@ describe("source-store", () => {
 
       yield* persistence.rows.secretMaterials.upsert({
         id: firstTokenId,
+        name: null,
         purpose: "auth_material",
         value: "ghp_first",
         createdAt: now,
@@ -92,6 +93,7 @@ describe("source-store", () => {
       });
       yield* persistence.rows.secretMaterials.upsert({
         id: secondTokenId,
+        name: null,
         purpose: "auth_material",
         value: "ghp_second",
         createdAt: now,

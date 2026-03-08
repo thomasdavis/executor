@@ -82,6 +82,7 @@ const seedWorkspaceCredentialState = (input: {
     });
     yield* input.persistence.rows.secretMaterials.upsert({
       id: tokenId,
+      name: null,
       purpose: "oauth_access_token",
       value: "token",
       createdAt: now,
@@ -89,6 +90,7 @@ const seedWorkspaceCredentialState = (input: {
     });
     yield* input.persistence.rows.secretMaterials.upsert({
       id: refreshId,
+      name: null,
       purpose: "oauth_refresh_token",
       value: "refresh",
       createdAt: now,
