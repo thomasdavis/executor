@@ -70,6 +70,7 @@ const McpExecutorAddInputSchema = Schema.Struct({
   endpoint: Schema.String,
   name: OptionalNullableStringSchema,
   namespace: OptionalNullableStringSchema,
+  headers: Schema.optional(Schema.NullOr(StringMapSchema)),
 });
 
 const McpBindingConfigSchema = Schema.Struct({

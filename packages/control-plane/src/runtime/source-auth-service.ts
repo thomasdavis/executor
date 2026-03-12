@@ -401,6 +401,7 @@ export type ExecutorAddSourceInput =
       endpoint: string;
       name?: string | null;
       namespace?: string | null;
+      headers?: Record<string, string> | null;
     }
   | {
       kind: "openapi";
@@ -1703,6 +1704,7 @@ export const createRuntimeSourceAuthService = (input: {
           endpoint: sourceInput.endpoint,
           name: sourceInput.name,
           namespace: sourceInput.namespace,
+          headers: "headers" in sourceInput ? (sourceInput.headers ?? null) : null,
           mcpDiscoveryElicitation: options?.mcpDiscoveryElicitation,
           baseUrl: options?.baseUrl,
           resolveSecretMaterial,

@@ -218,6 +218,7 @@ export const createExecutorToolMap = (input: {
             endpoint: string;
             name?: string | null;
             namespace?: string | null;
+            headers?: Record<string, string> | null;
           }
           | {
             kind: "openapi";
