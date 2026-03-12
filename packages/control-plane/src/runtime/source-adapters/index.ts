@@ -6,6 +6,7 @@ import { googleDiscoverySourceAdapter } from "./google-discovery";
 import { internalSourceAdapter } from "./internal";
 import { mcpSourceAdapter } from "./mcp";
 import { openApiSourceAdapter } from "./openapi";
+import { tpmjsSourceAdapter } from "./tpmjs";
 import type { SourceAdapter } from "./types";
 
 export const builtInSourceAdapters = [
@@ -13,6 +14,7 @@ export const builtInSourceAdapters = [
   graphqlSourceAdapter,
   googleDiscoverySourceAdapter,
   mcpSourceAdapter,
+  tpmjsSourceAdapter,
   internalSourceAdapter,
 ] as const satisfies readonly SourceAdapter[];
 
@@ -21,6 +23,7 @@ export const connectableSourceAdapters = [
   openApiSourceAdapter,
   graphqlSourceAdapter,
   googleDiscoverySourceAdapter,
+  tpmjsSourceAdapter,
 ] as const;
 
 export const ConnectSourcePayloadSchema = Schema.Union(
@@ -28,6 +31,7 @@ export const ConnectSourcePayloadSchema = Schema.Union(
   openApiSourceAdapter.connectPayloadSchema!,
   graphqlSourceAdapter.connectPayloadSchema!,
   googleDiscoverySourceAdapter.connectPayloadSchema!,
+  tpmjsSourceAdapter.connectPayloadSchema!,
 );
 
 export type ConnectSourcePayload = typeof ConnectSourcePayloadSchema.Type;
@@ -37,6 +41,7 @@ export const executorAddableSourceAdapters = [
   openApiSourceAdapter,
   graphqlSourceAdapter,
   googleDiscoverySourceAdapter,
+  tpmjsSourceAdapter,
 ] as const;
 
 export const ExecutorAddSourceInputSchema = Schema.Union(
@@ -44,6 +49,7 @@ export const ExecutorAddSourceInputSchema = Schema.Union(
   openApiSourceAdapter.executorAddInputSchema!,
   graphqlSourceAdapter.executorAddInputSchema!,
   googleDiscoverySourceAdapter.executorAddInputSchema!,
+  tpmjsSourceAdapter.executorAddInputSchema!,
 );
 
 export type ExecutorAddSourceInput = typeof ExecutorAddSourceInputSchema.Type;
