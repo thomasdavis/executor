@@ -1,6 +1,0 @@
-{
-  "functions": "packages/database/convex",
-  "codegen": {
-    "staticApi": true
-  }
-}

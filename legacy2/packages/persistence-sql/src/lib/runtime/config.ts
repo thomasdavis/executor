@@ -1,1 +1,0 @@
-export { readPersistenceSqlEnvironment } from "../../config";
