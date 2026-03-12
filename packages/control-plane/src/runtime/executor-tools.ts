@@ -260,6 +260,7 @@ export const createExecutorToolMap = (input: {
               endpoint: args.endpoint,
               name: args.name ?? null,
               namespace: args.namespace ?? null,
+              headers: args.headers ?? null,
               workspaceId: input.workspaceId,
               actorAccountId: input.accountId,
               executionId,
