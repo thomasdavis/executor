@@ -445,6 +445,19 @@ export type ExecutorAddSourceInput =
       importAuthPolicy?: SourceImportAuthPolicy | null;
       importAuth?: ExecutorHttpSourceAuthInput | null;
       auth?: ExecutorHttpSourceAuthInput | null;
+    }
+  | {
+      kind: "tpmjs";
+      workspaceId: WorkspaceId;
+      actorAccountId?: AccountId | null;
+      executionId: SourceAuthSession["executionId"];
+      interactionId: SourceAuthSession["interactionId"];
+      endpoint: string;
+      name?: string | null;
+      namespace?: string | null;
+      importAuthPolicy?: SourceImportAuthPolicy | null;
+      importAuth?: ExecutorHttpSourceAuthInput | null;
+      auth?: ExecutorHttpSourceAuthInput | null;
     };
 
 export type ConnectMcpSourceInput = {
@@ -609,7 +622,7 @@ const materializeExecutorHttpAuth = (input: {
   });
 
 const materializeExecutorHttpImportAuth = (input: {
-  sourceKind: "openapi" | "graphql" | "google_discovery";
+  sourceKind: "openapi" | "graphql" | "google_discovery" | "tpmjs";
   existing?: Source;
   importAuthPolicy?: SourceImportAuthPolicy | null;
   importAuth?: ExecutorHttpSourceAuthInput | null;
@@ -1168,7 +1181,7 @@ const connectMcpSourceInternal = (input: {
 
 const addExecutorHttpSource = (input: {
   rows: SqlControlPlaneRows;
-  sourceInput: Extract<ExecutorAddSourceInput, { kind: "openapi" | "graphql" }>;
+  sourceInput: Extract<ExecutorAddSourceInput, { kind: "openapi" | "graphql" | "tpmjs" }>;
   storeSecretMaterial: StoreSecretMaterial;
   resolveSecretMaterial: ResolveSecretMaterial;
   getLocalServerBaseUrl?: () => string | undefined;
@@ -1668,12 +1681,12 @@ export const createRuntimeSourceAuthService = (input: {
           getLocalServerBaseUrl: input.getLocalServerBaseUrl,
           baseUrl: options?.baseUrl,
         })
-      : hasSourceAdapterFamily(sourceInput.kind ?? "mcp", "http_api")
+      : sourceInput.kind === "tpmjs" || hasSourceAdapterFamily(sourceInput.kind ?? "mcp", "http_api")
       ? addExecutorHttpSource({
           rows: input.rows,
           sourceInput: sourceInput as Extract<
             ExecutorAddSourceInput,
-            { kind: "openapi" | "graphql" }
+            { kind: "openapi" | "graphql" | "tpmjs" }
           >,
           storeSecretMaterial,
           resolveSecretMaterial,

@@ -14,6 +14,8 @@ import {
 import { namespaceFromSourceName } from "../source-names";
 import type { SourceAdapter, SourceAdapterMaterialization } from "./types";
 import {
+  ConnectHttpAuthSchema,
+  ConnectHttpImportAuthSchema,
   createStandardToolDescriptor,
   decodeBindingConfig,
   decodeSourceBindingPayload,
@@ -33,12 +35,16 @@ const TpmjsConnectPayloadSchema = Schema.extend(
   }),
 );
 
-const TpmjsExecutorAddInputSchema = Schema.Struct({
-  kind: Schema.optional(Schema.Literal("tpmjs")),
-  endpoint: Schema.String,
-  name: OptionalNullableStringSchema,
-  namespace: OptionalNullableStringSchema,
-});
+const TpmjsExecutorAddInputSchema = Schema.extend(
+  ConnectHttpImportAuthSchema,
+  Schema.Struct({
+    kind: Schema.Literal("tpmjs"),
+    endpoint: Schema.String,
+    name: OptionalNullableStringSchema,
+    namespace: OptionalNullableStringSchema,
+    auth: Schema.optional(ConnectHttpAuthSchema),
+  }),
+);
 
 const TpmjsBindingConfigSchema = Schema.Struct({});
 
@@ -234,7 +240,7 @@ export const tpmjsSourceAdapter: SourceAdapter = {
   family: "http_api",
   bindingConfigVersion: TPMJS_BINDING_CONFIG_VERSION,
   providerKey: "tpmjs",
-  defaultImportAuthPolicy: "separate",
+  defaultImportAuthPolicy: "reuse_runtime",
   primaryDocumentKind: "tpmjs_manifest",
   primarySchemaBundleKind: null,
   connectPayloadSchema: TpmjsConnectPayloadSchema,
@@ -366,8 +372,18 @@ export const tpmjsSourceAdapter: SourceAdapter = {
 
       const providerData = decoded.right;
 
-      // Call the TPMJS executor endpoint
-      const executorUrl = `${source.endpoint}/api/tools/execute/${encodeURIComponent(providerData.packageName)}/${encodeURIComponent(providerData.exportName)}`;
+      // Call the TPMJS package executor (Railway-hosted Deno service)
+      // The executor URL is the source endpoint + /api/executor/execute-tool
+      // or falls back to the public executor at endearing-commitment-production.up.railway.app
+      const executorBaseUrl = "https://endearing-commitment-production.up.railway.app";
+      const executorUrl = `${executorBaseUrl}/execute-tool`;
+
+      const requestBody: Record<string, unknown> = {
+        packageName: providerData.packageName,
+        name: providerData.exportName,
+        version: providerData.version ?? "latest",
+        params: args ?? {},
+      };
 
       const response = yield* Effect.tryPromise({
         try: () =>
@@ -375,11 +391,8 @@ export const tpmjsSourceAdapter: SourceAdapter = {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...auth.headers,
             },
-            body: JSON.stringify({
-              parameters: args,
-            }),
+            body: JSON.stringify(requestBody),
           }),
         catch: (cause) =>
           new Error(
@@ -400,13 +413,26 @@ export const tpmjsSourceAdapter: SourceAdapter = {
       }
 
       const result = yield* Effect.tryPromise({
-        try: () => response.json(),
+        try: () => response.json() as Promise<{
+          success: boolean;
+          output?: unknown;
+          error?: string;
+          executionTimeMs?: number;
+        }>,
         catch: (cause) =>
           new Error(
             `Failed to parse TPMJS tool response: ${cause instanceof Error ? cause.message : String(cause)}`,
           ),
       });
 
-      return result;
+      if (!result.success) {
+        return yield* Effect.fail(
+          new Error(
+            `TPMJS tool ${providerData.packageName}::${providerData.exportName} failed: ${result.error ?? "unknown error"}`,
+          ),
+        );
+      }
+
+      return result.output;
     }),
 };

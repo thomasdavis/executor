@@ -239,6 +239,12 @@ export const createExecutorToolMap = (input: {
             discoveryUrl?: string | null;
             name?: string | null;
             namespace?: string | null;
+          }
+        | {
+            kind: "tpmjs";
+            endpoint: string;
+            name?: string | null;
+            namespace?: string | null;
           },
         context,
       ): Promise<Source> => {
